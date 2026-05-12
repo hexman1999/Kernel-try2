@@ -68,7 +68,23 @@ jobs:
         run: |
           mkdir -p ~/kernel
           cd ~/kernel
-          git clone --depth=1 -b ${{ env.KERNEL_BRANCH }} ${{ env.KERNEL_SOURCE }} sweet-kernel
+          
+          # Clone kernel source with retry logic
+          for attempt in {1..3}; do
+            echo "Kernel source clone attempt $attempt/3..."
+            if git clone --depth=1 -b ${{ env.KERNEL_BRANCH }} ${{ env.KERNEL_SOURCE }} sweet-kernel; then
+              echo "✓ Kernel source clone successful"
+              break
+            fi
+            if [ $attempt -lt 3 ]; then
+              echo "⚠ Clone attempt $attempt failed, retrying in 10s..."
+              sleep 10
+            else
+              echo "✗ Kernel source clone failed after 3 attempts"
+              exit 1
+            fi
+          done
+          
           cd sweet-kernel
           echo "KERNEL_DIR=$(pwd)" >> $GITHUB_ENV
 
@@ -77,8 +93,21 @@ jobs:
           cd ${{ env.KERNEL_DIR }}
           mkdir -p KernelSU
           
-          # Clone KernelSU
-          git clone --depth=1 ${{ env.KOWSU_REPO }} KernelSU/source
+          # Clone KernelSU with retry logic
+          for attempt in {1..3}; do
+            echo "KOWSU clone attempt $attempt/3..."
+            if git clone --depth=1 ${{ env.KOWSU_REPO }} KernelSU/source; then
+              echo "✓ KOWSU clone successful"
+              break
+            fi
+            if [ $attempt -lt 3 ]; then
+              echo "⚠ Clone attempt $attempt failed, retrying in 10s..."
+              sleep 10
+            else
+              echo "✗ KOWSU clone failed after 3 attempts"
+              exit 1
+            fi
+          done
           
           # Integrate KernelSU into kernel
           bash $GITHUB_WORKSPACE/scripts/integrate-kowsu.sh "${{ env.KERNEL_DIR }}"
@@ -88,8 +117,21 @@ jobs:
           cd ${{ env.KERNEL_DIR }}
           mkdir -p susfs
           
-          # Clone SUSFS
-          git clone --depth=1 ${{ env.SUSFS_REPO }} susfs/source
+          # Clone SUSFS with retry logic for network resilience
+          for attempt in {1..3}; do
+            echo "SUSFS clone attempt $attempt/3..."
+            if git clone --depth=1 ${{ env.SUSFS_REPO }} susfs/source; then
+              echo "✓ SUSFS clone successful"
+              break
+            fi
+            if [ $attempt -lt 3 ]; then
+              echo "⚠ Clone attempt $attempt failed, retrying in 10s..."
+              sleep 10
+            else
+              echo "✗ SUSFS clone failed after 3 attempts"
+              exit 1
+            fi
+          done
           
           # Apply SUSFS with inline hook method
           bash $GITHUB_WORKSPACE/scripts/integrate-susfs.sh "${{ env.KERNEL_DIR }}"
