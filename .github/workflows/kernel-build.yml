@@ -450,7 +450,7 @@ jobs:
 
       - name: Upload build artifacts
         if: env.BUILD_SUCCESS == 'true'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: kernel-sweet-${{ github.run_number }}
           path: ${{ env.ARTIFACTS_PATH }}/
