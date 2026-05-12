@@ -1,0 +1,70 @@
+# Build outputs
+out/
+build_artifacts/
+*.o
+*.a
+*.so
+*.ko
+*.mod.c
+*.mod
+
+# Kernel specific
+vmlinux
+vmlinux.o
+vmlinux.lds
+System.map
+.config
+.config.backup
+.config.old
+.version
+.scmversion
+
+# Object files
+*.obj
+*.elf
+*.gdb_history
+
+# Temporary files
+*~
+*.swp
+*.swo
+*.tmp
+.DS_Store
+*.orig
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+*.iml
+
+# Git
+.git/
+.gitkeep
+
+# Node modules (if using npm)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Downloads
+downloads/
+toolchain/
+android-ndk-*/
+
+# Source directories
+crdroid-kernel/
+KernelSU/
+susfs/
+
+# Artifacts
+artifacts/
+releases/
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env
+.env.local

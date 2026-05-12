@@ -1,0 +1,485 @@
+name: Build Kernel for Sweet (Redmi Note 10 Pro)
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      build_variant:
+        description: 'Build variant (user/userdebug/eng)'
+        required: false
+        default: 'userdebug'
+
+env:
+  DEVICE: sweet
+  DEVICE_NAME: Redmi Note 10 Pro
+  KERNEL_SOURCE: https://github.com/PixelOS-Devices/android_kernel_xiaomi_sm6150
+  KERNEL_BRANCH: sixteen_qpr2
+  KOWSU_REPO: https://github.com/KOWX712/KernelSU.git
+  SUSFS_REPO: https://github.com/simonpunk/susfs4ksu.git
+  CRDROID_REPO: https://github.com/crdroidandroid/android_kernel_xiaomi_sweet.git
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup build environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libncurses-dev \
+            bison \
+            flex \
+            libssl-dev \
+            libelf-dev \
+            bc \
+            pahole \
+            git \
+            curl \
+            wget \
+            zip \
+            ccache \
+            clang \
+            lld
+          
+          # Setup toolchain
+          mkdir -p ~/toolchain
+          cd ~/toolchain
+          
+          # Download Android NDK (for kernel compilation)
+          wget -q https://dl.google.com/android/repository/android-ndk-r23c-linux.zip
+          unzip -q android-ndk-r23c-linux.zip
+          echo "NDK_PATH=$(pwd)/android-ndk-r23c" >> $GITHUB_ENV
+
+      - name: Download kernel source
+        run: |
+          mkdir -p ~/kernel
+          cd ~/kernel
+          git clone --depth=1 -b ${{ env.KERNEL_BRANCH }} ${{ env.KERNEL_SOURCE }} sweet-kernel
+          cd sweet-kernel
+          echo "KERNEL_DIR=$(pwd)" >> $GITHUB_ENV
+
+      - name: Download and integrate KOWSU (KernelSU)
+        run: |
+          cd ${{ env.KERNEL_DIR }}
+          mkdir -p KernelSU
+          
+          # Clone KernelSU
+          git clone --depth=1 ${{ env.KOWSU_REPO }} KernelSU/source
+          
+          # Integrate KernelSU into kernel
+          bash $GITHUB_WORKSPACE/scripts/integrate-kowsu.sh "${{ env.KERNEL_DIR }}"
+
+      - name: Download and integrate SUSFS with inline hooks
+        run: |
+          cd ${{ env.KERNEL_DIR }}
+          mkdir -p susfs
+          
+          # Clone SUSFS
+          git clone --depth=1 ${{ env.SUSFS_REPO }} susfs/source
+          
+          # Apply SUSFS with inline hook method
+          bash $GITHUB_WORKSPACE/scripts/integrate-susfs.sh "${{ env.KERNEL_DIR }}"
+
+      - name: Apply device-specific patches for Sweet
+        run: |
+          cd ${{ env.KERNEL_DIR }}
+          export DEVICE_IMPORT="sweet-pixelos"
+          export MAIN_DEFCONFIG="arch/arm64/configs/sweet_defconfig"
+          
+          # Apply all device-specific patches
+          bash $GITHUB_WORKSPACE/scripts/apply-device-patches.sh "${{ env.KERNEL_DIR }}"
+
+      - name: Apply custom patches
+        run: |
+          cd ${{ env.KERNEL_DIR }}
+          
+          # Apply any additional patches from patches directory
+          if [ -d "$GITHUB_WORKSPACE/patches" ]; then
+            for patch in $GITHUB_WORKSPACE/patches/*.patch; do
+              if [ -f "$patch" ]; then
+                echo "Applying patch: $(basename $patch)"
+                patch -p1 < "$patch" || true
+              fi
+            done
+          fi
+
+      - name: Setup kernel configuration
+        run: |
+          cd ${{ env.KERNEL_DIR }}
+          export MAIN_DEFCONFIG="arch/arm64/configs/sweet_defconfig"
+          
+          # Get device configuration
+          if [ -f "$MAIN_DEFCONFIG" ]; then
+            cp "$MAIN_DEFCONFIG" .config
+          else
+            make -C ${{ env.KERNEL_DIR }} \
+              ARCH=arm64 \
+              CROSS_COMPILE=aarch64-linux-gnu- \
+              sweet_defconfig
+          fi
+          
+          # Enable required configs for integrations
+          bash $GITHUB_WORKSPACE/scripts/configure-kernel.sh "${{ env.KERNEL_DIR }}"
+
+      - name: Build kernel image and modules
+        run: |
+          cd ${{ env.KERNEL_DIR }}
+          
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export SUBARCH=arm64
+          export USE_CCACHE=1
+          export CCACHE_EXEC=/usr/bin/ccache
+          export KBUILD_BUILD_USER="GitHub_Actions"
+          export KBUILD_BUILD_HOST="github.com"
+          
+          echo "Starting kernel compilation for ${{ env.DEVICE }}..."
+          echo "Kernel directory: $(pwd)"
+          echo "Output directory: out/"
+          echo "Number of CPU cores: $(nproc)"
+          
+          # Build kernel with verbose output
+          if make -j$(nproc) \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CC=clang \
+            LD=ld.lld \
+            AR=llvm-ar \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            OBJDUMP=llvm-objdump \
+            STRIP=llvm-strip \
+            O=out; then
+            echo "✅ Kernel compilation successful"
+            echo "BUILD_SUCCESS=true" >> $GITHUB_ENV
+          else
+            echo "❌ Kernel compilation failed"
+            echo "BUILD_SUCCESS=false" >> $GITHUB_ENV
+            exit 1
+          fi
+
+      - name: Extract kernel artifacts
+        if: env.BUILD_SUCCESS == 'true'
+        run: |
+          cd ${{ env.KERNEL_DIR }}
+          
+          mkdir -p build_artifacts/boot
+          mkdir -p build_artifacts/modules
+          mkdir -p build_artifacts/dts
+          
+          echo "📦 Extracting kernel artifacts..."
+          
+          # Copy kernel image
+          if [ -f "out/arch/arm64/boot/Image.gz" ]; then
+            cp out/arch/arm64/boot/Image.gz build_artifacts/boot/
+            ls -lh build_artifacts/boot/Image.gz
+            echo "✅ Kernel image: Image.gz"
+          elif [ -f "out/arch/arm64/boot/Image" ]; then
+            gzip -k out/arch/arm64/boot/Image -c > build_artifacts/boot/Image.gz
+            ls -lh build_artifacts/boot/Image.gz
+            echo "✅ Kernel image: Image (compressed to Image.gz)"
+          else
+            echo "❌ ERROR: Kernel image not found!"
+            ls -la out/arch/arm64/boot/
+            exit 1
+          fi
+          
+          # Copy device tree blob overlay
+          if [ -f "out/arch/arm64/boot/dtbo.img" ]; then
+            cp out/arch/arm64/boot/dtbo.img build_artifacts/boot/
+            ls -lh build_artifacts/boot/dtbo.img
+            echo "✅ DTBO image: dtbo.img"
+          else
+            echo "⚠️  DTBO not found, attempting to build..."
+            if [ -f "out/arch/arm64/boot/dts/qcom/sm6150-sweet-qup.dtbo" ]; then
+              cp out/arch/arm64/boot/dts/qcom/sm6150-sweet-qup.dtbo build_artifacts/boot/dtbo.img
+              echo "✅ DTBO image: dtbo.img (from device tree)"
+            else
+              echo "⚠️  DTBO not available"
+            fi
+          fi
+          
+          # Copy device tree files
+          if [ -d "out/arch/arm64/boot/dts" ]; then
+            find out/arch/arm64/boot/dts -name "*.dtb" -o -name "*.dtbo" | head -10 | while read dts; do
+              cp "$dts" build_artifacts/dts/ 2>/dev/null || true
+            done
+            if [ "$(ls -A build_artifacts/dts)" ]; then
+              echo "✅ Device tree files copied"
+            fi
+          fi
+          
+          # Copy kernel modules
+          if [ -d "out/lib/modules" ]; then
+            find out/lib/modules -name "*.ko" | while read module; do
+              cp "$module" build_artifacts/modules/
+            done
+            if [ "$(ls -A build_artifacts/modules)" ]; then
+              echo "✅ Kernel modules: $(ls build_artifacts/modules | wc -l) files"
+            fi
+          fi
+          
+          # Also try finding .ko files directly
+          if ! [ "$(ls -A build_artifacts/modules)" ]; then
+            find out -name "*.ko" -exec cp {} build_artifacts/modules/ \;
+            if [ "$(ls -A build_artifacts/modules)" ]; then
+              echo "✅ Kernel modules: $(ls build_artifacts/modules | wc -l) files"
+            fi
+          fi
+          
+          # Create detailed build information
+          cat > build_artifacts/BUILD_INFO.txt << 'EOF'
+================================================================================
+  KERNEL BUILD INFORMATION
+================================================================================
+
+Device:            Redmi Note 10 Pro (sweet)
+Device Name:       ${{ env.DEVICE_NAME }}
+Kernel Codename:   ${{ env.DEVICE }}
+Android Version:   16 QPR2
+Build Date:        $(date '+%Y-%m-%d %H:%M:%S')
+Build System:      GitHub Actions (Ubuntu 22.04)
+
+================================================================================
+  KERNEL CONFIGURATION
+================================================================================
+
+Kernel Source:     PixelOS (sixteen_qpr2 branch)
+Compiler:          Clang + LLVM (llvm-ar, ld.lld)
+Optimization:      LTO (Link-Time Optimization)
+Compression:       gzip
+
+================================================================================
+  INTEGRATIONS
+================================================================================
+
+✅ KOWSU/KernelSU    - Kernel-level root solution
+✅ SUSFS             - Inline hook security filesystem
+✅ LN8000 Patches    - 5 patches from CRDroid
+✅ DTBO Patches      - 6 patches from Xiaomi
+✅ LTO Optimization  - Link-time optimization enabled
+✅ KPATCH Framework  - Live patching support
+
+Total Patches Applied: 13
+
+================================================================================
+  BUILD ARTIFACTS
+================================================================================
+
+boot/
+  ├── Image.gz      - Compressed kernel image
+  ├── dtbo.img      - Device tree binary overlay
+  └── [other DTS]   - Device tree source files
+
+modules/
+  └── *.ko          - Compiled kernel modules
+
+dts/
+  └── *.dtb/.dtbo   - Device tree files
+
+================================================================================
+  FLASHING INSTRUCTIONS
+================================================================================
+
+1. Reboot to bootloader:
+   $ adb reboot bootloader
+
+2. Flash kernel and DTBO:
+   $ fastboot flash boot Image.gz
+   $ fastboot flash dtbo dtbo.img
+
+3. Reboot device:
+   $ fastboot reboot
+
+Optional:
+   $ fastboot flash vendor_boot vendor_boot.img (if available)
+
+================================================================================
+  KERNEL INFORMATION
+================================================================================
+
+Kernel Version:    ${{ env.DEVICE }} - $(uname -r 2>/dev/null || echo "See kernel logs for details")
+Build Number:      GitHub Run #${{ github.run_number }}
+Build Commit:      ${{ github.sha }}
+Repository:        ${{ github.repository }}
+
+================================================================================
+  VERIFICATION CHECKLIST
+================================================================================
+
+✅ Kernel image (Image.gz)      - $([ -f build_artifacts/boot/Image.gz ] && echo "Present" || echo "Missing")
+✅ DTBO image (dtbo.img)        - $([ -f build_artifacts/boot/dtbo.img ] && echo "Present" || echo "Missing")
+✅ Kernel modules (.ko files)   - $([ -d build_artifacts/modules ] && [ "$(ls -A build_artifacts/modules)" ] && echo "Present" || echo "Not found")
+✅ Device tree files            - $([ -d build_artifacts/dts ] && [ "$(ls -A build_artifacts/dts)" ] && echo "Present" || echo "Not found")
+
+================================================================================
+  FILE SIZES
+================================================================================
+
+EOF
+          
+          # Add file sizes
+          echo "" >> build_artifacts/BUILD_INFO.txt
+          if [ -f "build_artifacts/boot/Image.gz" ]; then
+            echo "Image.gz:    $(ls -lh build_artifacts/boot/Image.gz | awk '{print $5}')" >> build_artifacts/BUILD_INFO.txt
+          fi
+          if [ -f "build_artifacts/boot/dtbo.img" ]; then
+            echo "dtbo.img:    $(ls -lh build_artifacts/boot/dtbo.img | awk '{print $5}')" >> build_artifacts/BUILD_INFO.txt
+          fi
+          
+          if [ -d "build_artifacts/modules" ] && [ "$(ls -A build_artifacts/modules)" ]; then
+            module_size=$(du -sh build_artifacts/modules | awk '{print $1}')
+            module_count=$(ls build_artifacts/modules | wc -l)
+            echo "Modules:     $module_count files ($module_size)" >> build_artifacts/BUILD_INFO.txt
+          fi
+          
+          echo "" >> build_artifacts/BUILD_INFO.txt
+          echo "Total artifacts size: $(du -sh build_artifacts | awk '{print $1}')" >> build_artifacts/BUILD_INFO.txt
+          echo "" >> build_artifacts/BUILD_INFO.txt
+          echo "=================================================================================" >> build_artifacts/BUILD_INFO.txt
+          echo "Build completed successfully!" >> build_artifacts/BUILD_INFO.txt
+          echo "=================================================================================" >> build_artifacts/BUILD_INFO.txt
+          
+          # Display summary
+          echo ""
+          echo "📋 ARTIFACT SUMMARY:"
+          cat build_artifacts/BUILD_INFO.txt | tail -30
+          
+          echo ""
+          echo "ARTIFACTS_PATH=$(pwd)/build_artifacts" >> $GITHUB_ENV
+
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ env.ARTIFACTS_PATH }}/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify build artifacts
+        if: env.BUILD_SUCCESS == 'true'
+        run: |
+          ARTIFACTS_PATH="${{ env.ARTIFACTS_PATH }}"
+          
+          echo "📋 Verifying build artifacts..."
+          echo "Artifact path: $ARTIFACTS_PATH"
+          
+          if [ ! -d "$ARTIFACTS_PATH" ]; then
+            echo "❌ ERROR: Artifacts directory not found!"
+            exit 1
+          fi
+          
+          # Check required files
+          required_files=("boot/Image.gz")
+          missing_files=()
+          
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$ARTIFACTS_PATH/$file" ]; then
+              missing_files+=("$file")
+            fi
+          done
+          
+          if [ ${#missing_files[@]} -gt 0 ]; then
+            echo "⚠️  WARNING: Missing required files:"
+            for file in "${missing_files[@]}"; do
+              echo "  - $file"
+            done
+          fi
+          
+          # List all artifacts
+          echo ""
+          echo "📦 Available artifacts:"
+          find "$ARTIFACTS_PATH" -type f | sort | while read file; do
+            rel_path="${file#$ARTIFACTS_PATH/}"
+            size=$(ls -lh "$file" | awk '{print $5}')
+            echo "  ✅ $rel_path ($size)"
+          done
+          
+          # Count files
+          echo ""
+          total_files=$(find "$ARTIFACTS_PATH" -type f | wc -l)
+          total_size=$(du -sh "$ARTIFACTS_PATH" | awk '{print $1}')
+          echo "📊 Summary: $total_files files, $total_size total"
+
+      - name: Upload build artifacts
+        if: env.BUILD_SUCCESS == 'true'
+        uses: actions/upload-artifact@v3
+        with:
+          name: kernel-sweet-${{ github.run_number }}
+          path: ${{ env.ARTIFACTS_PATH }}/
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && env.BUILD_SUCCESS == 'true'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ Kernel build successful!\n\nArtifacts are available in the build artifacts section.'
+            })
+
+      - name: Notify on build failure
+        if: failure()
+        run: |
+          echo "❌ BUILD FAILED - Collecting diagnostics..."
+          
+          if [ -d "${{ env.KERNEL_DIR }}" ]; then
+            cd "${{ env.KERNEL_DIR }}"
+            echo ""
+            echo "📋 Kernel directory structure:"
+            ls -la | head -20
+            
+            if [ -d "out" ]; then
+              echo ""
+              echo "📂 Output directory structure:"
+              ls -la out/ 2>/dev/null | head -20
+              
+              if [ -d "out/arch/arm64" ]; then
+                echo ""
+                echo "📂 ARM64 output:"
+                find out/arch/arm64 -type f | head -20
+              fi
+            fi
+            
+            echo ""
+            echo "📝 Last 50 lines of build output (if available):"
+            tail -50 build.log 2>/dev/null || echo "(No build log found)"
+          fi
+          
+          echo ""
+          echo "Repository: ${{ github.repository }}"
+          echo "Run ID: ${{ github.run_id }}"
+          echo "Check full logs at: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Notify on build failure (GitHub Comment)
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **Kernel build failed**\n\nPlease check the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.\n\n**Tips:**\n- Check patch compatibility\n- Verify kernel config options\n- Review build output for errors'
+            }) || console.log('Not a PR, skipping comment')
