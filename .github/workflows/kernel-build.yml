@@ -242,117 +242,147 @@ jobs:
           fi
           
           # Create detailed build information
-          cat > build_artifacts/BUILD_INFO.txt << 'EOF'
-================================================================================
-  KERNEL BUILD INFORMATION
-================================================================================
-
-Device:            Redmi Note 10 Pro (sweet)
-Device Name:       ${{ env.DEVICE_NAME }}
-Kernel Codename:   ${{ env.DEVICE }}
-Android Version:   16 QPR2
-Build Date:        $(date '+%Y-%m-%d %H:%M:%S')
-Build System:      GitHub Actions (Ubuntu 22.04)
-
-================================================================================
-  KERNEL CONFIGURATION
-================================================================================
-
-Kernel Source:     PixelOS (sixteen_qpr2 branch)
-Compiler:          Clang + LLVM (llvm-ar, ld.lld)
-Optimization:      LTO (Link-Time Optimization)
-Compression:       gzip
-
-================================================================================
-  INTEGRATIONS
-================================================================================
-
-✅ KOWSU/KernelSU    - Kernel-level root solution
-✅ SUSFS             - Inline hook security filesystem
-✅ LN8000 Patches    - 5 patches from CRDroid
-✅ DTBO Patches      - 6 patches from Xiaomi
-✅ LTO Optimization  - Link-time optimization enabled
-✅ KPATCH Framework  - Live patching support
-
-Total Patches Applied: 13
-
-================================================================================
-  BUILD ARTIFACTS
-================================================================================
-
-boot/
-  ├── Image.gz      - Compressed kernel image
-  ├── dtbo.img      - Device tree binary overlay
-  └── [other DTS]   - Device tree source files
-
-modules/
-  └── *.ko          - Compiled kernel modules
-
-dts/
-  └── *.dtb/.dtbo   - Device tree files
-
-================================================================================
-  FLASHING INSTRUCTIONS
-================================================================================
-
-1. Reboot to bootloader:
-   $ adb reboot bootloader
-
-2. Flash kernel and DTBO:
-   $ fastboot flash boot Image.gz
-   $ fastboot flash dtbo dtbo.img
-
-3. Reboot device:
-   $ fastboot reboot
-
-Optional:
-   $ fastboot flash vendor_boot vendor_boot.img (if available)
-
-================================================================================
-  KERNEL INFORMATION
-================================================================================
-
-Kernel Version:    ${{ env.DEVICE }} - $(uname -r 2>/dev/null || echo "See kernel logs for details")
-Build Number:      GitHub Run #${{ github.run_number }}
-Build Commit:      ${{ github.sha }}
-Repository:        ${{ github.repository }}
-
-================================================================================
-  VERIFICATION CHECKLIST
-================================================================================
-
-✅ Kernel image (Image.gz)      - $([ -f build_artifacts/boot/Image.gz ] && echo "Present" || echo "Missing")
-✅ DTBO image (dtbo.img)        - $([ -f build_artifacts/boot/dtbo.img ] && echo "Present" || echo "Missing")
-✅ Kernel modules (.ko files)   - $([ -d build_artifacts/modules ] && [ "$(ls -A build_artifacts/modules)" ] && echo "Present" || echo "Not found")
-✅ Device tree files            - $([ -d build_artifacts/dts ] && [ "$(ls -A build_artifacts/dts)" ] && echo "Present" || echo "Not found")
-
-================================================================================
-  FILE SIZES
-================================================================================
-
-EOF
+          BUILD_INFO="build_artifacts/BUILD_INFO.txt"
+          {
+            echo "================================================================================"
+            echo "  KERNEL BUILD INFORMATION"
+            echo "================================================================================"
+            echo ""
+            echo "Device:            Redmi Note 10 Pro (sweet)"
+            echo "Device Name:       ${{ env.DEVICE_NAME }}"
+            echo "Kernel Codename:   ${{ env.DEVICE }}"
+            echo "Android Version:   16 QPR2"
+            echo "Build Date:        $(date '+%Y-%m-%d %H:%M:%S')"
+            echo "Build System:      GitHub Actions (Ubuntu 22.04)"
+            echo ""
+            echo "================================================================================"
+            echo "  KERNEL CONFIGURATION"
+            echo "================================================================================"
+            echo ""
+            echo "Kernel Source:     PixelOS (sixteen_qpr2 branch)"
+            echo "Compiler:          Clang + LLVM (llvm-ar, ld.lld)"
+            echo "Optimization:      LTO (Link-Time Optimization)"
+            echo "Compression:       gzip"
+            echo ""
+            echo "================================================================================"
+            echo "  INTEGRATIONS"
+            echo "================================================================================"
+            echo ""
+            echo "✅ KOWSU/KernelSU    - Kernel-level root solution"
+            echo "✅ SUSFS             - Inline hook security filesystem"
+            echo "✅ LN8000 Patches    - 5 patches from CRDroid"
+            echo "✅ DTBO Patches      - 6 patches from Xiaomi"
+            echo "✅ LTO Optimization  - Link-time optimization enabled"
+            echo "✅ KPATCH Framework  - Live patching support"
+            echo ""
+            echo "Total Patches Applied: 13"
+            echo ""
+            echo "================================================================================"
+            echo "  BUILD ARTIFACTS"
+            echo "================================================================================"
+            echo ""
+            echo "boot/"
+            echo "  ├── Image.gz      - Compressed kernel image"
+            echo "  ├── dtbo.img      - Device tree binary overlay"
+            echo "  └── [other DTS]   - Device tree source files"
+            echo ""
+            echo "modules/"
+            echo "  └── *.ko          - Compiled kernel modules"
+            echo ""
+            echo "dts/"
+            echo "  └── *.dtb/.dtbo   - Device tree files"
+            echo ""
+            echo "================================================================================"
+            echo "  FLASHING INSTRUCTIONS"
+            echo "================================================================================"
+            echo ""
+            echo "1. Reboot to bootloader:"
+            echo "   $ adb reboot bootloader"
+            echo ""
+            echo "2. Flash kernel and DTBO:"
+            echo "   $ fastboot flash boot Image.gz"
+            echo "   $ fastboot flash dtbo dtbo.img"
+            echo ""
+            echo "3. Reboot device:"
+            echo "   $ fastboot reboot"
+            echo ""
+            echo "Optional:"
+            echo "   $ fastboot flash vendor_boot vendor_boot.img (if available)"
+            echo ""
+            echo "================================================================================"
+            echo "  KERNEL INFORMATION"
+            echo "================================================================================"
+            echo ""
+            echo "Build Number:      GitHub Run #${{ github.run_number }}"
+            echo "Build Commit:      ${{ github.sha }}"
+            echo "Repository:        ${{ github.repository }}"
+            echo ""
+            echo "================================================================================"
+            echo "  VERIFICATION CHECKLIST"
+            echo "================================================================================"
+            echo ""
+          } > "$BUILD_INFO"
           
           # Add file sizes
-          echo "" >> build_artifacts/BUILD_INFO.txt
+          echo "" >> "$BUILD_INFO"
           if [ -f "build_artifacts/boot/Image.gz" ]; then
-            echo "Image.gz:    $(ls -lh build_artifacts/boot/Image.gz | awk '{print $5}')" >> build_artifacts/BUILD_INFO.txt
+            size=$(ls -lh build_artifacts/boot/Image.gz | awk '{print $5}')
+            echo "✅ Kernel image (Image.gz)      - Present ($size)" >> "$BUILD_INFO"
+          else
+            echo "❌ Kernel image (Image.gz)      - Missing" >> "$BUILD_INFO"
           fi
+          
           if [ -f "build_artifacts/boot/dtbo.img" ]; then
-            echo "dtbo.img:    $(ls -lh build_artifacts/boot/dtbo.img | awk '{print $5}')" >> build_artifacts/BUILD_INFO.txt
+            size=$(ls -lh build_artifacts/boot/dtbo.img | awk '{print $5}')
+            echo "✅ DTBO image (dtbo.img)        - Present ($size)" >> "$BUILD_INFO"
+          else
+            echo "⚠️  DTBO image (dtbo.img)        - Not found" >> "$BUILD_INFO"
           fi
           
           if [ -d "build_artifacts/modules" ] && [ "$(ls -A build_artifacts/modules)" ]; then
             module_size=$(du -sh build_artifacts/modules | awk '{print $1}')
             module_count=$(ls build_artifacts/modules | wc -l)
-            echo "Modules:     $module_count files ($module_size)" >> build_artifacts/BUILD_INFO.txt
+            echo "✅ Kernel modules (.ko files)   - Present ($module_count files, $module_size)" >> "$BUILD_INFO"
+          else
+            echo "⚠️  Kernel modules (.ko files)   - Not found" >> "$BUILD_INFO"
           fi
           
-          echo "" >> build_artifacts/BUILD_INFO.txt
-          echo "Total artifacts size: $(du -sh build_artifacts | awk '{print $1}')" >> build_artifacts/BUILD_INFO.txt
-          echo "" >> build_artifacts/BUILD_INFO.txt
-          echo "=================================================================================" >> build_artifacts/BUILD_INFO.txt
-          echo "Build completed successfully!" >> build_artifacts/BUILD_INFO.txt
-          echo "=================================================================================" >> build_artifacts/BUILD_INFO.txt
+          if [ -d "build_artifacts/dts" ] && [ "$(ls -A build_artifacts/dts)" ]; then
+            dts_count=$(ls build_artifacts/dts | wc -l)
+            echo "✅ Device tree files            - Present ($dts_count files)" >> "$BUILD_INFO"
+          else
+            echo "⚠️  Device tree files            - Not found" >> "$BUILD_INFO"
+          fi
+          
+          echo "" >> "$BUILD_INFO"
+          echo "================================================================================" >> "$BUILD_INFO"
+          echo "  FILE SIZES" >> "$BUILD_INFO"
+          echo "================================================================================" >> "$BUILD_INFO"
+          echo "" >> "$BUILD_INFO"
+          
+          if [ -f "build_artifacts/boot/Image.gz" ]; then
+            size=$(ls -lh build_artifacts/boot/Image.gz | awk '{print $5}')
+            echo "Image.gz:    $size" >> "$BUILD_INFO"
+          fi
+          
+          if [ -f "build_artifacts/boot/dtbo.img" ]; then
+            size=$(ls -lh build_artifacts/boot/dtbo.img | awk '{print $5}')
+            echo "dtbo.img:    $size" >> "$BUILD_INFO"
+          fi
+          
+          if [ -d "build_artifacts/modules" ] && [ "$(ls -A build_artifacts/modules)" ]; then
+            module_size=$(du -sh build_artifacts/modules | awk '{print $1}')
+            module_count=$(ls build_artifacts/modules | wc -l)
+            echo "Modules:     $module_count files ($module_size)" >> "$BUILD_INFO"
+          fi
+          
+          echo "" >> "$BUILD_INFO"
+          total_size=$(du -sh build_artifacts | awk '{print $1}')
+          echo "Total artifacts size: $total_size" >> "$BUILD_INFO"
+          echo "" >> "$BUILD_INFO"
+          echo "================================================================================" >> "$BUILD_INFO"
+          echo "Build completed successfully!" >> "$BUILD_INFO"
+          echo "================================================================================" >> "$BUILD_INFO"
           
           # Display summary
           echo ""
