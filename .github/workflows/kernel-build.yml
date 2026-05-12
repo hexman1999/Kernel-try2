@@ -18,7 +18,7 @@ env:
   DEVICE: sweet
   DEVICE_NAME: Redmi Note 10 Pro
   KERNEL_SOURCE: https://github.com/PixelOS-Devices/android_kernel_xiaomi_sm6150
-  KERNEL_BRANCH: sixteen_qpr2
+  KERNEL_BRANCH: sixteen-qpr2
   KOWSU_REPO: https://github.com/KOWX712/KernelSU.git
   SUSFS_REPO: https://github.com/simonpunk/susfs4ksu.git
   CRDROID_REPO: https://github.com/crdroidandroid/android_kernel_xiaomi_sweet.git
