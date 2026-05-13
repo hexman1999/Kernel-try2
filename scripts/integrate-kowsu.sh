@@ -23,6 +23,15 @@ rm -rf drivers/kernelsu || true
 # Copy KernelSU to drivers directory
 cp -r "$KOWSU_SRC" drivers/kernelsu
 
+# Create Makefile for KernelSU if it doesn't exist
+if [ ! -f "drivers/kernelsu/Makefile" ]; then
+    cat > drivers/kernelsu/Makefile << 'EOF'
+obj-y += kernel/
+obj-y += core/
+EOF
+    echo "Created Makefile for KernelSU"
+fi
+
 # Add KernelSU to kernel build system
 echo "" >> drivers/Makefile
 echo "# KernelSU Integration" >> drivers/Makefile

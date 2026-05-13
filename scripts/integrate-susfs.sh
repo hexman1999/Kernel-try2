@@ -22,6 +22,15 @@ rm -rf fs/susfs || true
 # Copy SUSFS to fs directory
 cp -r "$SUSFS_SRC" fs/susfs
 
+# Create Makefile for SUSFS if it doesn't exist
+if [ ! -f "fs/susfs/Makefile" ]; then
+    cat > fs/susfs/Makefile << 'EOF'
+obj-y += susfs.o
+obj-y += ksu.o
+EOF
+    echo "Created Makefile for SUSFS"
+fi
+
 # Update fs/Makefile to include SUSFS
 if grep -q "obj-\$(CONFIG_SUSFS)" fs/Makefile; then
     echo "SUSFS already in fs/Makefile"
