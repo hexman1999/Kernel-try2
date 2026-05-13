@@ -183,6 +183,16 @@ jobs:
             exit 1
           fi
           
+          # Disable CONFIG_CC_STACKPROTECTOR_STRONG to avoid compiler compatibility issues
+          sed -i '/CONFIG_CC_STACKPROTECTOR_STRONG/d' out/.config
+          echo '# CONFIG_CC_STACKPROTECTOR_STRONG is not set' >> out/.config
+          
+          # Regenerate auto.conf to reflect the changes
+          make -C ${{ env.KERNEL_DIR }} \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            O=out olddefconfig
+          
           # Enable required configs for integrations
           bash $GITHUB_WORKSPACE/scripts/configure-kernel.sh "${{ env.KERNEL_DIR }}"
 
