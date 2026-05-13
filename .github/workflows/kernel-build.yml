@@ -164,6 +164,10 @@ jobs:
           cd ${{ env.KERNEL_DIR }}
           export MAIN_DEFCONFIG="arch/arm64/configs/sweet_defconfig"
           
+          # Clean the source directory before building with separate output directory
+          echo "Cleaning kernel source directory..."
+          make mrproper || true
+          
           # Check if the defconfig file exists
           if [ -f "$MAIN_DEFCONFIG" ]; then
             echo "Using main defconfig: $MAIN_DEFCONFIG"
@@ -561,7 +565,7 @@ jobs:
           echo ""
           echo "Repository: ${{ github.repository }}"
           echo "Run ID: ${{ github.run_id }}"
-          echo "Check full logs at: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          echo "Check full logs at: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Notify on build failure (GitHub Comment)
         if: failure() && github.event_name == 'pull_request'

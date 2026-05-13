@@ -23,14 +23,25 @@ rm -rf drivers/kernelsu || true
 # Copy KernelSU to drivers directory
 cp -r "$KOWSU_SRC" drivers/kernelsu
 
-# Create Makefile for KernelSU if it doesn't exist
+# Create comprehensive Makefile for KernelSU with subdirectory support
 if [ ! -f "drivers/kernelsu/Makefile" ]; then
     cat > drivers/kernelsu/Makefile << 'EOF'
 obj-y += kernel/
 obj-y += core/
+obj-y += ksu.o
 EOF
     echo "Created Makefile for KernelSU"
 fi
+
+# Create Makefiles for KernelSU subdirectories if they don't exist
+for dir in kernel core; do
+    if [ -d "drivers/kernelsu/$dir" ] && [ ! -f "drivers/kernelsu/$dir/Makefile" ]; then
+        cat > "drivers/kernelsu/$dir/Makefile" << 'EOF'
+obj-y += $(wildcard *.o)
+EOF
+        echo "Created Makefile for drivers/kernelsu/$dir"
+    fi
+done
 
 # Add KernelSU to kernel build system
 echo "" >> drivers/Makefile

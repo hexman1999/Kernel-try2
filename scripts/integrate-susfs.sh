@@ -22,14 +22,25 @@ rm -rf fs/susfs || true
 # Copy SUSFS to fs directory
 cp -r "$SUSFS_SRC" fs/susfs
 
-# Create Makefile for SUSFS if it doesn't exist
+# Create comprehensive Makefile for SUSFS if it doesn't exist
 if [ ! -f "fs/susfs/Makefile" ]; then
     cat > fs/susfs/Makefile << 'EOF'
+obj-y += $(wildcard *.o)
+obj-y += $(wildcard */*.o)
 obj-y += susfs.o
 obj-y += ksu.o
 EOF
     echo "Created Makefile for SUSFS"
 fi
+
+# Create Makefiles for SUSFS subdirectories if needed
+find fs/susfs -mindepth 1 -maxdepth 1 -type d | while read dir; do
+    if [ ! -f "$dir/Makefile" ]; then
+        cat > "$dir/Makefile" << 'EOF'
+obj-y += $(wildcard *.o)
+EOF
+    fi
+done
 
 # Update fs/Makefile to include SUSFS
 if grep -q "obj-\$(CONFIG_SUSFS)" fs/Makefile; then
