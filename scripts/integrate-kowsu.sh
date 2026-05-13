@@ -24,29 +24,26 @@ rm -rf drivers/kernelsu || true
 cp -r "$KOWSU_SRC" drivers/kernelsu
 
 # Create comprehensive Makefile for KernelSU with subdirectory support
-if [ ! -f "drivers/kernelsu/Makefile" ]; then
-    cat > drivers/kernelsu/Makefile << 'EOF'
+cat > drivers/kernelsu/Makefile << 'EOF'
+# KernelSU Makefile
+obj-y := $(patsubst %.c, %.o, $(wildcard *.c))
 obj-y += kernel/
 obj-y += core/
-obj-y += ksu.o
 EOF
-    echo "Created Makefile for KernelSU"
-fi
 
-# Create Makefiles for KernelSU subdirectories if they don't exist
-for dir in kernel core; do
-    if [ -d "drivers/kernelsu/$dir" ] && [ ! -f "drivers/kernelsu/$dir/Makefile" ]; then
-        cat > "drivers/kernelsu/$dir/Makefile" << 'EOF'
-obj-y += $(wildcard *.o)
+# Recursively create Makefiles for all KernelSU subdirectories
+find drivers/kernelsu -mindepth 1 -type d | sort | while read dir; do
+    if [ ! -f "$dir/Makefile" ]; then
+        cat > "$dir/Makefile" << 'EOF'
+obj-y := $(patsubst %.c, %.o, $(wildcard *.c))
 EOF
-        echo "Created Makefile for drivers/kernelsu/$dir"
     fi
 done
 
-# Add KernelSU to kernel build system
-echo "" >> drivers/Makefile
-echo "# KernelSU Integration" >> drivers/Makefile
-echo "obj-y += kernelsu/" >> drivers/Makefile
+# Add KernelSU to kernel build system only if not already there
+if ! grep -q "obj-y += kernelsu" drivers/Makefile; then
+    echo "obj-y += kernelsu/" >> drivers/Makefile
+fi
 
 # Update Kconfig
 cat >> drivers/Kconfig << 'EOF'
