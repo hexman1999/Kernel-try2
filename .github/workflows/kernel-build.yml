@@ -164,14 +164,22 @@ jobs:
           cd ${{ env.KERNEL_DIR }}
           export MAIN_DEFCONFIG="arch/arm64/configs/sweet_defconfig"
           
-          # Get device configuration
+          # Check if the defconfig file exists
           if [ -f "$MAIN_DEFCONFIG" ]; then
-            cp "$MAIN_DEFCONFIG" .config
-          else
+            echo "Using main defconfig: $MAIN_DEFCONFIG"
             make -C ${{ env.KERNEL_DIR }} \
               ARCH=arm64 \
               CROSS_COMPILE=aarch64-linux-gnu- \
               sweet_defconfig
+          else
+            echo "❌ Defconfig file not found: $MAIN_DEFCONFIG"
+            exit 1
+          fi
+          
+          # Verify .config file is generated
+          if [ ! -f .config ]; then
+            echo "❌ .config file not generated!"
+            exit 1
           fi
           
           # Enable required configs for integrations
@@ -542,7 +550,7 @@ jobs:
           echo ""
           echo "Repository: ${{ github.repository }}"
           echo "Run ID: ${{ github.run_id }}"
-          echo "Check full logs at: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "Check full logs at: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
       - name: Notify on build failure (GitHub Comment)
         if: failure() && github.event_name == 'pull_request'
