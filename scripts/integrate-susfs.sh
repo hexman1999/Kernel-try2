@@ -29,14 +29,16 @@ obj-y := $(patsubst %.c, %.o, $(wildcard *.c))
 obj-y += $(patsubst %/,%/built-in.a, $(dir $(wildcard */Makefile)))
 EOF
 
-# Recursively create Makefiles for all SUSFS subdirectories
-find fs/susfs -mindepth 1 -type d | sort | while read dir; do
+# Recursively create Makefiles for all SUSFS subdirectories (avoiding subshell issues)
+# Use process substitution instead of pipe to avoid subshell
+while IFS= read -r dir; do
     if [ ! -f "$dir/Makefile" ]; then
         cat > "$dir/Makefile" << 'EOF'
 obj-y := $(patsubst %.c, %.o, $(wildcard *.c))
 EOF
+        echo "Created Makefile for $dir"
     fi
-done
+done < <(find fs/susfs -mindepth 1 -type d)
 
 # Update fs/Makefile to include SUSFS only if not already there
 if ! grep -q "obj-\$(CONFIG_SUSFS)" fs/Makefile; then
