@@ -170,15 +170,16 @@ jobs:
             make -C ${{ env.KERNEL_DIR }} \
               ARCH=arm64 \
               CROSS_COMPILE=aarch64-linux-gnu- \
+              O=out \
               sweet_defconfig
           else
             echo "❌ Defconfig file not found: $MAIN_DEFCONFIG"
             exit 1
           fi
           
-          # Verify .config file is generated
-          if [ ! -f .config ]; then
-            echo "❌ .config file not generated!"
+          # Verify .config file is generated in the output directory
+          if [ ! -f out/.config ]; then
+            echo "❌ .config file not generated in out/ directory!"
             exit 1
           fi
           
