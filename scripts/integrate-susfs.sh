@@ -24,21 +24,26 @@ cp -r "$SUSFS_SRC" fs/susfs
 
 # Create comprehensive Makefile for SUSFS
 cat > fs/susfs/Makefile << 'EOF'
-# SUSFS Makefile
+# SUSFS Makefile - compile source files and handle subdirectories
 obj-y := $(patsubst %.c, %.o, $(wildcard *.c))
-obj-y += $(patsubst %/,%/built-in.a, $(dir $(wildcard */Makefile)))
+
+# Only reference directories that contain source code or subdirectories
+# Typically ksu_susfs contains the kernel patches
+obj-y += ksu_susfs/
 EOF
 
 # Recursively create Makefiles for all SUSFS subdirectories (avoiding subshell issues)
 # Use process substitution instead of pipe to avoid subshell
+# Exclude hidden directories and .git directories
 while IFS= read -r dir; do
     if [ ! -f "$dir/Makefile" ]; then
         cat > "$dir/Makefile" << 'EOF'
+# Nested Makefile - compile all .c files and handle subdirectories
 obj-y := $(patsubst %.c, %.o, $(wildcard *.c))
+obj-y += $(patsubst %/,%/built-in.a, $(dir $(wildcard */Makefile)))
 EOF
-        echo "Created Makefile for $dir"
     fi
-done < <(find fs/susfs -mindepth 1 -type d)
+done < <(find fs/susfs -mindepth 1 -type d ! -name ".git*" ! -name ".*")
 
 # Update fs/Makefile to include SUSFS only if not already there
 if ! grep -q "obj-\$(CONFIG_SUSFS)" fs/Makefile; then

@@ -25,10 +25,15 @@ cp -r "$KOWSU_SRC" drivers/kernelsu
 
 # Create comprehensive Makefile for KernelSU with subdirectory support
 cat > drivers/kernelsu/Makefile << 'EOF'
-# KernelSU Makefile
+# KernelSU Makefile - only reference top-level directories with actual source
 obj-y := $(patsubst %.c, %.o, $(wildcard *.c))
+
+# Reference only top-level directories that contain source files
 obj-y += kernel/
-obj-y += core/
+obj-y += uapi/
+
+# Add any other top-level .c/.S files or directories if they exist
+obj-y += $(filter-out kernel/ uapi/, $(wildcard */))
 EOF
 
 # Recursively create Makefiles for all KernelSU subdirectories (avoiding subshell issues)
@@ -36,11 +41,12 @@ EOF
 while IFS= read -r dir; do
     if [ ! -f "$dir/Makefile" ]; then
         cat > "$dir/Makefile" << 'EOF'
+# Nested Makefile - compile all .c files and handle subdirectories
 obj-y := $(patsubst %.c, %.o, $(wildcard *.c))
+obj-y += $(patsubst %/,%/built-in.a, $(dir $(wildcard */Makefile)))
 EOF
-        echo "Created Makefile for $dir"
     fi
-done < <(find drivers/kernelsu -mindepth 1 -type d)
+done < <(find drivers/kernelsu -mindepth 1 -type d ! -name ".git*" ! -name ".*")
 
 # Add KernelSU to kernel build system only if not already there
 if ! grep -q "obj-y += kernelsu" drivers/Makefile; then
